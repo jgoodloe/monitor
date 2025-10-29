@@ -4,13 +4,13 @@ plugins {
 }
 
 android {
-    namespace = "com.example.monitor"
+    namespace = "com.monitor"
     compileSdk {
         version = release(36)
     }
 
     defaultConfig {
-        applicationId = "com.example.monitor"
+        applicationId = "com.monitor"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
@@ -26,6 +26,7 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
     compileOptions {
