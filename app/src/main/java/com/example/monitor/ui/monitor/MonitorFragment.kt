@@ -16,6 +16,7 @@ class MonitorFragment : Fragment() {
 
     private lateinit var monitorViewModel: MonitorViewModel
     private lateinit var monitorAdapter: MonitorAdapter
+    private lateinit var groupedAdapter: GroupedMonitorAdapter
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -35,15 +36,36 @@ class MonitorFragment : Fragment() {
             binding.swipeRefreshLayout.isRefreshing = false
         }
 
+        monitorViewModel.items.observe(viewLifecycleOwner) {
+            groupedAdapter.submitList(it)
+        }
+
+        monitorViewModel.lastTestTime.observe(viewLifecycleOwner) { testTime ->
+            binding.textLastTestTime.text = "Last test: $testTime"
+        }
+
         monitorViewModel.startMonitoring()
 
         return root
     }
 
     private fun setupRecyclerView() {
-        monitorAdapter = MonitorAdapter()
+        monitorAdapter = MonitorAdapter { status ->
+            // Retest the clicked item
+            monitorViewModel.retestItem(status.name)
+            // Show visual feedback
+            binding.swipeRefreshLayout.isRefreshing = true
+        }
+        
+        groupedAdapter = GroupedMonitorAdapter { itemName ->
+            // Retest the clicked item
+            monitorViewModel.retestItem(itemName)
+            // Show visual feedback
+            binding.swipeRefreshLayout.isRefreshing = true
+        }
+        
         binding.recyclerViewMonitor.apply {
-            adapter = monitorAdapter
+            adapter = groupedAdapter
             layoutManager = LinearLayoutManager(context)
         }
     }
