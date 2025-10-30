@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import com.monitor.data.MonitorItem
 import com.monitor.data.MonitorStatus
 import com.monitor.util.CRLVerifier
+import com.monitor.util.ConfigurationManager
 import com.monitor.util.DnsResolver
 import com.monitor.util.NetworkMonitor
 import kotlinx.coroutines.Dispatchers
@@ -23,6 +24,7 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
     private val networkMonitor = NetworkMonitor()
     private val dnsResolver = DnsResolver()
     private val crlVerifier = CRLVerifier(application.applicationContext)
+    private val configManager = ConfigurationManager(application.applicationContext)
 
     private val _statuses = MutableLiveData<List<MonitorStatus>>()
     val statuses: LiveData<List<MonitorStatus>> = _statuses
@@ -33,24 +35,15 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
     private val _lastTestTime = MutableLiveData<String>()
     val lastTestTime: LiveData<String> = _lastTestTime
 
-    private val urlsToMonitor = listOf(
-        "https://pivi.xcloud.authentx.com/portal/index.html",
-        "https://piv.xcloud.authentx.com/portal/index.html"
-    )
+    // Load from ConfigurationManager - will get defaults if not configured
+    private val urlsToMonitor: List<String>
+        get() = configManager.getUrls()
 
-    private val hostsToMonitor = listOf(
-        "piv.xcloud.authentx.com",
-        "pivi.xcloud.authentx.com",
-        "ocsp.xca.xpki.com",
-        "crl.xca.xpki.com",
-        "aia.xca.xpki.com"
-    )
+    private val hostsToMonitor: List<String>
+        get() = configManager.getDnsHosts()
 
-    private val crlUrlsToMonitor = listOf(
-        "http://crl.xca.xpki.com/CRLs/XTec_PIVI_CA1.crl",
-        "http://66.165.167.225/CRLs/XTec_PIVI_CA1.crl",
-        "http://152.186.38.46/CRLs/XTec_PIVI_CA1.crl"
-    )
+    private val crlUrlsToMonitor: List<String>
+        get() = configManager.getCrlUrls()
 
     fun startMonitoring() {
         viewModelScope.launch {
@@ -78,10 +71,14 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
                 }
                 
                 // Monitor DNS hosts
+                Log.i("MonitorViewModel", "Starting DNS monitoring for ${hostsToMonitor.size} hosts")
                 hostsToMonitor.forEach { host ->
+                    Log.d("MonitorViewModel", "Processing DNS: $host")
                     val (isUp, errorMessage) = dnsResolver.resolve(host)
                     results.add(MonitorStatus(host, isUp, errorMessage))
+                    Log.d("MonitorViewModel", "DNS result for $host: Up=$isUp, Error=$errorMessage")
                 }
+                Log.i("MonitorViewModel", "Completed DNS monitoring")
                 
                 // Monitor CRLs
                 Log.i("MonitorViewModel", "Starting CRL monitoring for ${crlUrlsToMonitor.size} CRLs")
@@ -131,10 +128,13 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
             val timeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
             _lastTestTime.postValue(timeFormat.format(Date()))
             
+            Log.i("MonitorViewModel", "Total results collected: ${results.size}")
             _statuses.postValue(results)
-            
+
             // Create grouped items with headers
+            Log.d("MonitorViewModel", "Creating grouped items...")
             updateGroupedItems(results)
+            Log.d("MonitorViewModel", "Posted ${_items.value?.size ?: 0} grouped items")
         }
     }
 

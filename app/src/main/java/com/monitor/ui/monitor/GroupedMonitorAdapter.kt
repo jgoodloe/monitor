@@ -70,6 +70,7 @@ class GroupedMonitorAdapter(
         private val onItemClick: (String) -> Unit
     ) : RecyclerView.ViewHolder(itemView) {
         private val urlTextView: TextView = itemView.findViewById(R.id.text_view_url)
+        private val certInfoTextView: TextView = itemView.findViewById(R.id.text_view_cert_info)
         private val statusTextView: TextView = itemView.findViewById(R.id.text_view_status)
         private val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
 
@@ -106,62 +107,37 @@ class GroupedMonitorAdapter(
             val isHTTPS = status.itemType == MonitorItem.ItemType.URL && 
                          status.name.startsWith("https://", ignoreCase = true)
             
-            if (status.isUp) {
-                val statusText = buildString {
-                    append("Up")
-                    
-                    // For HTTPS URLs, show only expiry date
-                    if (isHTTPS && status.validityPeriodEnd != null) {
-                        append("\nCert Expires: ${dateFormat.format(status.validityPeriodEnd)}")
-                    }
-                    
-                    // For CRLs, show validity period (start and end)
-                    if (isCRL && status.validityPeriodStart != null && status.validityPeriodEnd != null) {
-                        append("\nValid: ${dateFormat.format(status.validityPeriodStart)}")
-                        append("\nto: ${dateFormat.format(status.validityPeriodEnd)}")
-                    }
-                    
-                    // Add any error/warning messages (including certificate expiry warnings)
-                    if (status.errorMessage != null) {
-                        val errorMsg = status.errorMessage
-                        // For HTTPS, always show certificate warnings even if validity period is shown
-                        val shouldShow = if (isHTTPS) {
-                            // Always show HTTPS messages (they may contain expiry warnings)
-                            true
-                        } else if (isCRL) {
-                            // For CRLs, don't duplicate validity period info
-                            val alreadyHasValidity = errorMsg.contains("Valid:", ignoreCase = true)
-                            !alreadyHasValidity
-                        } else {
-                            true
-                        }
-                        if (shouldShow) {
-                            append(if (isCRL || isHTTPS) "\n$errorMsg" else ": $errorMsg")
-                        }
-                    }
+            // Build details (cert info / validity / failure reason) under URL
+            val details = buildString {
+                // For HTTPS URLs, show only expiry date
+                if (isHTTPS && status.validityPeriodEnd != null) {
+                    append("Cert Expires: ${dateFormat.format(status.validityPeriodEnd)}")
                 }
-                statusTextView.text = statusText
+                // For CRLs, show validity period (start and end)
+                if (isCRL && status.validityPeriodStart != null && status.validityPeriodEnd != null) {
+                    if (isNotEmpty()) append('\n')
+                    append("Valid: ${dateFormat.format(status.validityPeriodStart)}")
+                    append(" to: ${dateFormat.format(status.validityPeriodEnd)}")
+                }
+                // Always show failure/warning messages here if present
+                status.errorMessage?.let { msg ->
+                    if (isNotEmpty()) append('\n')
+                    append(msg)
+                }
+            }
+            if (details.isNotEmpty()) {
+                certInfoTextView.text = details
+                certInfoTextView.visibility = View.VISIBLE
+            } else {
+                certInfoTextView.visibility = View.GONE
+            }
+            
+            // Status text shows only Up/Down, color-coded
+            if (status.isUp) {
+                statusTextView.text = "Up"
                 statusTextView.setTextColor(itemView.context.getColor(R.color.status_up))
             } else {
-                val statusText = buildString {
-                    append("Down")
-                    
-                    // For HTTPS URLs, show only expiry date even if down
-                    if (isHTTPS && status.validityPeriodEnd != null) {
-                        append("\nCert Expires: ${dateFormat.format(status.validityPeriodEnd)}")
-                    }
-                    
-                    // For CRLs, show validity period even if down
-                    if (isCRL && status.validityPeriodStart != null && status.validityPeriodEnd != null) {
-                        append("\nValid: ${dateFormat.format(status.validityPeriodStart)}")
-                        append("\nto: ${dateFormat.format(status.validityPeriodEnd)}")
-                    }
-                    
-                    // Add error message
-                    val errorMsg = status.errorMessage ?: "Unknown error"
-                    append(if (isCRL || isHTTPS) "\n$errorMsg" else ": $errorMsg")
-                }
-                statusTextView.text = statusText
+                statusTextView.text = "Down"
                 statusTextView.setTextColor(itemView.context.getColor(R.color.status_down))
             }
         }

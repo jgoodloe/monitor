@@ -1,6 +1,7 @@
 package com.monitor.ui.monitor
 
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -37,6 +38,10 @@ class MonitorFragment : Fragment() {
         }
 
         monitorViewModel.items.observe(viewLifecycleOwner) {
+            Log.i("MonitorFragment", "Received ${it?.size ?: 0} items from ViewModel")
+            it?.forEachIndexed { index, item ->
+                Log.d("MonitorFragment", "Item $index: ${item.javaClass.simpleName}")
+            }
             groupedAdapter.submitList(it)
         }
 
