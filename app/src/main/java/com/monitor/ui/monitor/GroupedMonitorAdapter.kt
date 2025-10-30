@@ -14,7 +14,9 @@ import java.util.Locale
 
 class GroupedMonitorAdapter(
     private val onItemClick: (String) -> Unit,
-    private val onDnsStatusClick: ((String) -> Unit)? = null
+    private val onDnsStatusClick: ((String) -> Unit)? = null,
+    private val onUrlStatusClick: ((String) -> Unit)? = null,
+    private val onCrlStatusClick: ((String) -> Unit)? = null
 ) : ListAdapter<MonitorItem, RecyclerView.ViewHolder>(MonitorItemDiffCallback()) {
 
     companion object {
@@ -39,7 +41,7 @@ class GroupedMonitorAdapter(
             VIEW_TYPE_STATUS -> {
                 val view = LayoutInflater.from(parent.context)
                     .inflate(R.layout.item_monitor_status, parent, false)
-                StatusViewHolder(view, onItemClick, onDnsStatusClick)
+                StatusViewHolder(view, onItemClick, onDnsStatusClick, onUrlStatusClick, onCrlStatusClick)
             }
             else -> throw IllegalArgumentException("Unknown view type: $viewType")
         }
@@ -69,7 +71,9 @@ class GroupedMonitorAdapter(
     class StatusViewHolder(
         itemView: View,
         private val onItemClick: (String) -> Unit,
-        private val onDnsStatusClick: ((String) -> Unit)?
+        private val onDnsStatusClick: ((String) -> Unit)?,
+        private val onUrlStatusClick: ((String) -> Unit)?,
+        private val onCrlStatusClick: ((String) -> Unit)?
     ) : RecyclerView.ViewHolder(itemView) {
         private val urlTextView: TextView = itemView.findViewById(R.id.text_view_url)
         private val certInfoTextView: TextView = itemView.findViewById(R.id.text_view_cert_info)
@@ -91,13 +95,12 @@ class GroupedMonitorAdapter(
         fun bind(status: MonitorItem.Status) {
             urlTextView.text = status.name
             
-            // If DNS, tapping the status opens detail
-            if (status.itemType == MonitorItem.ItemType.DNS) {
-                statusTextView.setOnClickListener {
-                    onDnsStatusClick?.invoke(status.name)
-                }
-            } else {
-                statusTextView.setOnClickListener(null)
+            // If DNS, tapping the status opens detail; if URL, open URL detail; if CRL, open CRL detail
+            when (status.itemType) {
+                MonitorItem.ItemType.DNS -> statusTextView.setOnClickListener { onDnsStatusClick?.invoke(status.name) }
+                MonitorItem.ItemType.URL -> statusTextView.setOnClickListener { onUrlStatusClick?.invoke(status.name) }
+                MonitorItem.ItemType.CRL -> statusTextView.setOnClickListener { onCrlStatusClick?.invoke(status.name) }
+                else -> statusTextView.setOnClickListener(null)
             }
             
             // Adjust padding based on item type (less padding for DNS)

@@ -13,25 +13,19 @@
         <action
             android:id="@+id/action_nav_monitor_to_dnsDetail"
             app:destination="@id/nav_dns_detail" />
+        <action
+            android:id="@+id/action_nav_monitor_to_urlDetail"
+            app:destination="@id/nav_url_detail" />
+        <action
+            android:id="@+id/action_nav_monitor_to_crlDetail"
+            app:destination="@id/nav_crl_detail" />
     </fragment>
 
     <fragment
-        android:id="@+id/nav_transform"
-        android:name="com.monitor.ui.transform.TransformFragment"
-        android:label="@string/menu_transform"
-        tools:layout="@layout/fragment_transform" />
-
-    <fragment
-        android:id="@+id/nav_reflow"
-        android:name="com.monitor.ui.reflow.ReflowFragment"
-        android:label="@string/menu_reflow"
-        tools:layout="@layout/fragment_reflow" />
-
-    <fragment
-        android:id="@+id/nav_slideshow"
-        android:name="com.monitor.ui.slideshow.SlideshowFragment"
-        android:label="@string/menu_slideshow"
-        tools:layout="@layout/fragment_slideshow" />
+        android:id="@+id/nav_logs"
+        android:name="com.monitor.ui.logs.LogsFragment"
+        android:label="@string/menu_logs"
+        tools:layout="@layout/fragment_logs" />
 
     <fragment
         android:id="@+id/nav_settings"
@@ -46,6 +40,26 @@
         tools:layout="@layout/fragment_dns_detail" >
         <argument
             android:name="hostname"
+            app:argType="string" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/nav_url_detail"
+        android:name="com.monitor.ui.url.UrlDetailFragment"
+        android:label="URL Detail"
+        tools:layout="@layout/fragment_url_detail" >
+        <argument
+            android:name="urlString"
+            app:argType="string" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/nav_crl_detail"
+        android:name="com.monitor.ui.crl.CrlDetailFragment"
+        android:label="CRL Detail"
+        tools:layout="@layout/fragment_crl_detail" >
+        <argument
+            android:name="crlUrl"
             app:argType="string" />
     </fragment>
 </navigation>

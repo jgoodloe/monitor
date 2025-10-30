@@ -35,6 +35,9 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
     private val _lastTestTime = MutableLiveData<String>()
     val lastTestTime: LiveData<String> = _lastTestTime
 
+    // Track active monitoring job to cancel if needed
+    private var activeMonitoringJob: kotlinx.coroutines.Job? = null
+
     // Load from ConfigurationManager - will get defaults if not configured
     private val urlsToMonitor: List<String>
         get() = configManager.getUrls()
@@ -46,95 +49,105 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
         get() = configManager.getCrlUrls()
 
     fun startMonitoring() {
-        viewModelScope.launch {
+        // Cancel any ongoing monitoring to prevent duplicate checks
+        activeMonitoringJob?.cancel()
+        
+        activeMonitoringJob = viewModelScope.launch {
             val results = mutableListOf<MonitorStatus>()
-            withContext(Dispatchers.IO) {
-                // Monitor URLs
-                urlsToMonitor.forEach { url ->
-                    val urlResult = networkMonitor.checkUrl(url)
-                    val errorMsg = buildString {
-                        if (urlResult.errorMessage != null) {
-                            append(urlResult.errorMessage)
-                        }
-                        if (urlResult.certificateExpiryWarning != null) {
-                            if (isNotEmpty()) append(" | ")
-                            append(urlResult.certificateExpiryWarning)
-                        }
-                    }.ifEmpty { null }
-                    results.add(MonitorStatus(
-                        url, 
-                        urlResult.isUp, 
-                        errorMsg,
-                        urlResult.certificateNotBefore,
-                        urlResult.certificateNotAfter
-                    ))
-                }
-                
-                // Monitor DNS hosts
-                Log.i("MonitorViewModel", "Starting DNS monitoring for ${hostsToMonitor.size} hosts")
-                hostsToMonitor.forEach { host ->
-                    Log.d("MonitorViewModel", "Processing DNS: $host")
-                    val (isUp, errorMessage) = dnsResolver.resolve(host)
-                    results.add(MonitorStatus(host, isUp, errorMessage))
-                    Log.d("MonitorViewModel", "DNS result for $host: Up=$isUp, Error=$errorMessage")
-                }
-                Log.i("MonitorViewModel", "Completed DNS monitoring")
-                
-                // Monitor CRLs
-                Log.i("MonitorViewModel", "Starting CRL monitoring for ${crlUrlsToMonitor.size} CRLs")
-                crlUrlsToMonitor.forEachIndexed { index, crlUrl ->
-                    Log.d("MonitorViewModel", "Processing CRL ${index + 1}/${crlUrlsToMonitor.size}: $crlUrl")
-                    try {
-                        val crlResult = crlVerifier.verifyCRL(crlUrl)
-                        val isUp = crlResult.canDownload && crlResult.isValid
-                        
-                        // Build status message with validity period info
-                        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+            try {
+                withContext(Dispatchers.IO) {
+                    // Monitor URLs
+                    urlsToMonitor.forEach { url ->
+                        val urlResult = networkMonitor.checkUrl(url)
                         val errorMsg = buildString {
-                            when {
-                                !crlResult.canDownload -> append("Failed to download CRL")
-                                !crlResult.isValid -> append(crlResult.warningMessage ?: "CRL validation failed")
-                                crlResult.warningMessage != null -> append("Warning: ${crlResult.warningMessage}")
+                            if (urlResult.errorMessage != null) {
+                                append(urlResult.errorMessage)
                             }
-                            
-                            // Always add validity period if available (even if no warnings)
-                            if (crlResult.thisUpdate != null && crlResult.nextUpdate != null) {
+                            if (urlResult.certificateExpiryWarning != null) {
                                 if (isNotEmpty()) append(" | ")
-                                append("Valid: ${dateFormat.format(crlResult.thisUpdate)} - ${dateFormat.format(crlResult.nextUpdate)}")
-                            } else if (isEmpty() && crlResult.canDownload) {
-                                // If we have no message but downloaded successfully, show basic status
-                                append("CRL downloaded")
+                                append(urlResult.certificateExpiryWarning)
                             }
                         }.ifEmpty { null }
-                        
-                        val status = MonitorStatus(
-                            crlUrl, 
-                            isUp, 
-                            errorMsg,
-                            crlResult.thisUpdate,
-                            crlResult.nextUpdate
+                        results.add(
+                            MonitorStatus(
+                                url,
+                                urlResult.isUp,
+                                errorMsg,
+                                urlResult.certificateNotBefore,
+                                urlResult.certificateNotAfter
+                            )
                         )
-                        results.add(status)
-                        Log.i("MonitorViewModel", "Added CRL status: $crlUrl (Up: $isUp)")
-                    } catch (e: Exception) {
-                        Log.e("MonitorViewModel", "Error processing CRL $crlUrl", e)
-                        results.add(MonitorStatus(crlUrl, false, "Error: ${e.message}"))
                     }
-                }
-                Log.i("MonitorViewModel", "Completed CRL monitoring. Total results: ${results.size}")
-            }
-            
-            // Update last test time
-            val timeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
-            _lastTestTime.postValue(timeFormat.format(Date()))
-            
-            Log.i("MonitorViewModel", "Total results collected: ${results.size}")
-            _statuses.postValue(results)
 
-            // Create grouped items with headers
-            Log.d("MonitorViewModel", "Creating grouped items...")
-            updateGroupedItems(results)
-            Log.d("MonitorViewModel", "Posted ${_items.value?.size ?: 0} grouped items")
+                    // Monitor DNS hosts
+                    Log.i("MonitorViewModel", "Starting DNS monitoring for ${hostsToMonitor.size} hosts")
+                    hostsToMonitor.forEach { host ->
+                        Log.d("MonitorViewModel", "Processing DNS: $host")
+                        try {
+                            val (isUp, errorMessage) = dnsResolver.resolve(host)
+                            results.add(MonitorStatus(host, isUp, errorMessage))
+                            Log.d("MonitorViewModel", "DNS result for $host: Up=$isUp, Error=$errorMessage")
+                        } catch (e: Exception) {
+                            Log.e("MonitorViewModel", "Error resolving DNS $host", e)
+                            results.add(MonitorStatus(host, false, "Error: ${e.message}"))
+                        }
+                    }
+                    Log.i("MonitorViewModel", "Completed DNS monitoring")
+
+                    // Monitor CRLs
+                    Log.i("MonitorViewModel", "Starting CRL monitoring for ${crlUrlsToMonitor.size} CRLs")
+                    crlUrlsToMonitor.forEachIndexed { index, crlUrl ->
+                        Log.d("MonitorViewModel", "Processing CRL ${index + 1}/${crlUrlsToMonitor.size}: $crlUrl")
+                        try {
+                            val crlResult = crlVerifier.verifyCRL(crlUrl)
+                            val isUp = crlResult.canDownload && crlResult.isValid
+
+                            val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+                            val errorMsg = buildString {
+                                when {
+                                    !crlResult.canDownload -> append("Failed to download CRL")
+                                    !crlResult.isValid -> append(crlResult.warningMessage ?: "CRL validation failed")
+                                    crlResult.warningMessage != null -> append("Warning: ${crlResult.warningMessage}")
+                                }
+                                if (crlResult.thisUpdate != null && crlResult.nextUpdate != null) {
+                                    if (isNotEmpty()) append(" | ")
+                                    append("Valid: ${dateFormat.format(crlResult.thisUpdate)} - ${dateFormat.format(crlResult.nextUpdate)}")
+                                } else if (isEmpty() && crlResult.canDownload) {
+                                    append("CRL downloaded")
+                                }
+                            }.ifEmpty { null }
+
+                            results.add(
+                                MonitorStatus(
+                                    crlUrl,
+                                    isUp,
+                                    errorMsg,
+                                    crlResult.thisUpdate,
+                                    crlResult.nextUpdate
+                                )
+                            )
+                        } catch (e: Exception) {
+                            Log.e("MonitorViewModel", "Error processing CRL $crlUrl", e)
+                            results.add(MonitorStatus(crlUrl, false, "Error: ${e.message}"))
+                        }
+                    }
+                    Log.i("MonitorViewModel", "Completed CRL monitoring. Total results: ${results.size}")
+                }
+            } catch (e: Exception) {
+                Log.e("MonitorViewModel", "startMonitoring failed", e)
+                // Surface a synthetic error row to ensure UI updates
+                results.add(MonitorStatus("Monitoring run", false, "Unexpected error: ${e.message}"))
+            } finally {
+                val timeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+                _lastTestTime.postValue(timeFormat.format(Date()))
+
+                Log.i("MonitorViewModel", "Total results collected: ${results.size}")
+                _statuses.postValue(results)
+
+                Log.d("MonitorViewModel", "Creating grouped items...")
+                updateGroupedItems(results)
+                Log.d("MonitorViewModel", "Posted ${_items.value?.size ?: 0} grouped items")
+            }
         }
     }
 

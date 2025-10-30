@@ -9,6 +9,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.monitor.R
 import com.monitor.databinding.FragmentMonitorBinding
 
 class MonitorFragment : Fragment() {
@@ -38,12 +39,15 @@ class MonitorFragment : Fragment() {
             binding.swipeRefreshLayout.isRefreshing = false
         }
 
-        monitorViewModel.items.observe(viewLifecycleOwner) {
-            Log.i("MonitorFragment", "Received ${it?.size ?: 0} items from ViewModel")
-            it?.forEachIndexed { index, item ->
+        monitorViewModel.items.observe(viewLifecycleOwner) { items ->
+            Log.i("MonitorFragment", "Received ${items?.size ?: 0} items from ViewModel")
+            items?.forEachIndexed { index, item ->
                 Log.d("MonitorFragment", "Item $index: ${item.javaClass.simpleName}")
             }
-            groupedAdapter.submitList(it)
+            // Submit a new list instance to ensure diffing runs
+            groupedAdapter.submitList(items?.toList())
+            // Request layout in case the RecyclerView needs to redraw
+            binding.recyclerViewMonitor.post { groupedAdapter.notifyDataSetChanged() }
         }
 
         monitorViewModel.lastTestTime.observe(viewLifecycleOwner) { testTime ->
@@ -67,12 +71,19 @@ class MonitorFragment : Fragment() {
                 binding.swipeRefreshLayout.isRefreshing = true
             },
             onDnsStatusClick = { hostname ->
-                val args = android.os.Bundle().apply { putString("hostname", hostname) }
-                val destName = "nav_dns_detail"
-                val destId = resources.getIdentifier(destName, "id", requireContext().packageName)
-                if (destId != 0) {
-                    findNavController().navigate(destId, args)
-                }
+                Log.d("MonitorFragment", "DNS detail clicked for: $hostname")
+                val args = Bundle().apply { putString("hostname", hostname) }
+                findNavController().navigate(R.id.nav_dns_detail, args)
+            },
+            onUrlStatusClick = { urlString ->
+                Log.d("MonitorFragment", "URL detail clicked for: $urlString")
+                val args = Bundle().apply { putString("urlString", urlString) }
+                findNavController().navigate(R.id.nav_url_detail, args)
+            },
+            onCrlStatusClick = { crlUrl ->
+                Log.d("MonitorFragment", "CRL detail clicked for: $crlUrl")
+                val args = Bundle().apply { putString("crlUrl", crlUrl) }
+                findNavController().navigate(R.id.nav_crl_detail, args)
             }
         )
 

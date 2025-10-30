@@ -49,7 +49,8 @@ class CRLVerifier(private val context: Context? = null) {
         val isValid: Boolean,
         val warningMessage: String?,
         val thisUpdate: Date? = null,
-        val nextUpdate: Date? = null
+        val nextUpdate: Date? = null,
+        val revokedCertificateCount: Int? = null
     )
 
     /**
@@ -107,6 +108,7 @@ class CRLVerifier(private val context: Context? = null) {
                     warningMessage = crlResult.warningMessage
                     val thisUpdate = crlResult.thisUpdate
                     val nextUpdate = crlResult.nextUpdate
+                    val revokedCertCount = crlResult.revokedCertificateCount
                     
                     Log.i("CRLVerifier", "CRL parsing result: isValid=$isValid, warningMessage=$warningMessage")
                     Log.i("CRLVerifier", "CRL validity: thisUpdate=$thisUpdate, nextUpdate=$nextUpdate")
@@ -117,7 +119,8 @@ class CRLVerifier(private val context: Context? = null) {
                         isValid = isValid,
                         warningMessage = warningMessage,
                         thisUpdate = thisUpdate,
-                        nextUpdate = nextUpdate
+                        nextUpdate = nextUpdate,
+                        revokedCertificateCount = revokedCertCount
                     )
                 } catch (e: Exception) {
                     Log.e("CRLVerifier", "Error parsing downloaded CRL", e)
@@ -164,7 +167,8 @@ class CRLVerifier(private val context: Context? = null) {
                         isValid = isValid,
                         warningMessage = warningMessage,
                         thisUpdate = crlResult.thisUpdate,
-                        nextUpdate = crlResult.nextUpdate
+                        nextUpdate = crlResult.nextUpdate,
+                        revokedCertificateCount = crlResult.revokedCertificateCount
                     )
                 } else {
                     return CRLVerificationResult(false, false, "SSL error and retry failed: ${e.message}")
@@ -195,7 +199,8 @@ class CRLVerifier(private val context: Context? = null) {
         val isValid: Boolean,
         val warningMessage: String?,
         val thisUpdate: Date?,
-        val nextUpdate: Date?
+        val nextUpdate: Date?,
+        val revokedCertificateCount: Int? = null
     )
 
     /**
@@ -220,15 +225,19 @@ class CRLVerifier(private val context: Context? = null) {
             // Check if CRL is currently valid (current time is between thisUpdate and nextUpdate)
             val isCurrentlyValid = currentTime.after(thisUpdate) && currentTime.before(nextUpdate)
             
+            // Get revoked certificate count early
+            val revokedCertCount = crl.revokedCertificates?.size ?: 0
+            Log.i("CRLVerifier", "CRL contains $revokedCertCount revoked certificates")
+            
             if (!isCurrentlyValid) {
                 if (currentTime.before(thisUpdate)) {
                     val warning = "CRL not yet valid. thisUpdate: $thisUpdate, Current: $currentTime"
                     Log.w("CRLVerifier", warning)
-                    return CRLParsingResult(false, warning, thisUpdate, nextUpdate)
+                    return CRLParsingResult(false, warning, thisUpdate, nextUpdate, revokedCertCount)
                 } else {
                     val warning = "CRL has expired. nextUpdate: $nextUpdate, Current: $currentTime"
                     Log.w("CRLVerifier", warning)
-                    return CRLParsingResult(false, warning, thisUpdate, nextUpdate)
+                    return CRLParsingResult(false, warning, thisUpdate, nextUpdate, revokedCertCount)
                 }
             }
             
@@ -245,15 +254,12 @@ class CRLVerifier(private val context: Context? = null) {
                 warnings.add(warning)
             }
             
-            // Additional validation: CRL size
-            val revokedCertCount = crl.revokedCertificates?.size ?: 0
-            Log.i("CRLVerifier", "CRL contains $revokedCertCount revoked certificates")
-            
             CRLParsingResult(
                 isValid = true,
                 warningMessage = if (warnings.isNotEmpty()) warnings.joinToString("; ") else null,
                 thisUpdate = thisUpdate,
-                nextUpdate = nextUpdate
+                nextUpdate = nextUpdate,
+                revokedCertificateCount = revokedCertCount
             )
         } catch (e: Exception) {
             Log.e("CRLVerifier", "Error parsing CRL", e)
