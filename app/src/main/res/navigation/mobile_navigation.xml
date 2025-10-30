@@ -9,7 +9,11 @@
         android:id="@+id/nav_monitor"
         android:name="com.monitor.ui.monitor.MonitorFragment"
         android:label="@string/menu_monitor"
-        tools:layout="@layout/fragment_monitor" />
+        tools:layout="@layout/fragment_monitor" >
+        <action
+            android:id="@+id/action_nav_monitor_to_dnsDetail"
+            app:destination="@id/nav_dns_detail" />
+    </fragment>
 
     <fragment
         android:id="@+id/nav_transform"
@@ -34,4 +38,14 @@
         android:name="com.monitor.ui.settings.SettingsFragment"
         android:label="@string/menu_settings"
         tools:layout="@layout/fragment_settings" />
+
+    <fragment
+        android:id="@+id/nav_dns_detail"
+        android:name="com.monitor.ui.dns.DnsDetailFragment"
+        android:label="DNS Detail"
+        tools:layout="@layout/fragment_dns_detail" >
+        <argument
+            android:name="hostname"
+            app:argType="string" />
+    </fragment>
 </navigation>

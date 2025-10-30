@@ -7,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
+import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.monitor.databinding.FragmentMonitorBinding
 
@@ -56,19 +57,25 @@ class MonitorFragment : Fragment() {
 
     private fun setupRecyclerView() {
         monitorAdapter = MonitorAdapter { status ->
-            // Retest the clicked item
             monitorViewModel.retestItem(status.name)
-            // Show visual feedback
             binding.swipeRefreshLayout.isRefreshing = true
         }
-        
-        groupedAdapter = GroupedMonitorAdapter { itemName ->
-            // Retest the clicked item
-            monitorViewModel.retestItem(itemName)
-            // Show visual feedback
-            binding.swipeRefreshLayout.isRefreshing = true
-        }
-        
+
+        groupedAdapter = GroupedMonitorAdapter(
+            onItemClick = { itemName ->
+                monitorViewModel.retestItem(itemName)
+                binding.swipeRefreshLayout.isRefreshing = true
+            },
+            onDnsStatusClick = { hostname ->
+                val args = android.os.Bundle().apply { putString("hostname", hostname) }
+                val destName = "nav_dns_detail"
+                val destId = resources.getIdentifier(destName, "id", requireContext().packageName)
+                if (destId != 0) {
+                    findNavController().navigate(destId, args)
+                }
+            }
+        )
+
         binding.recyclerViewMonitor.apply {
             adapter = groupedAdapter
             layoutManager = LinearLayoutManager(context)

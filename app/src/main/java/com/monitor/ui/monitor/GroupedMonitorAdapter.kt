@@ -13,7 +13,8 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 class GroupedMonitorAdapter(
-    private val onItemClick: (String) -> Unit
+    private val onItemClick: (String) -> Unit,
+    private val onDnsStatusClick: ((String) -> Unit)? = null
 ) : ListAdapter<MonitorItem, RecyclerView.ViewHolder>(MonitorItemDiffCallback()) {
 
     companion object {
@@ -38,7 +39,7 @@ class GroupedMonitorAdapter(
             VIEW_TYPE_STATUS -> {
                 val view = LayoutInflater.from(parent.context)
                     .inflate(R.layout.item_monitor_status, parent, false)
-                StatusViewHolder(view, onItemClick)
+                StatusViewHolder(view, onItemClick, onDnsStatusClick)
             }
             else -> throw IllegalArgumentException("Unknown view type: $viewType")
         }
@@ -67,7 +68,8 @@ class GroupedMonitorAdapter(
 
     class StatusViewHolder(
         itemView: View,
-        private val onItemClick: (String) -> Unit
+        private val onItemClick: (String) -> Unit,
+        private val onDnsStatusClick: ((String) -> Unit)?
     ) : RecyclerView.ViewHolder(itemView) {
         private val urlTextView: TextView = itemView.findViewById(R.id.text_view_url)
         private val certInfoTextView: TextView = itemView.findViewById(R.id.text_view_cert_info)
@@ -89,6 +91,15 @@ class GroupedMonitorAdapter(
         fun bind(status: MonitorItem.Status) {
             urlTextView.text = status.name
             
+            // If DNS, tapping the status opens detail
+            if (status.itemType == MonitorItem.ItemType.DNS) {
+                statusTextView.setOnClickListener {
+                    onDnsStatusClick?.invoke(status.name)
+                }
+            } else {
+                statusTextView.setOnClickListener(null)
+            }
+            
             // Adjust padding based on item type (less padding for DNS)
             val verticalPadding = when (status.itemType) {
                 MonitorItem.ItemType.DNS -> 8 // Less padding for DNS (8dp)
@@ -109,17 +120,14 @@ class GroupedMonitorAdapter(
             
             // Build details (cert info / validity / failure reason) under URL
             val details = buildString {
-                // For HTTPS URLs, show only expiry date
                 if (isHTTPS && status.validityPeriodEnd != null) {
                     append("Cert Expires: ${dateFormat.format(status.validityPeriodEnd)}")
                 }
-                // For CRLs, show validity period (start and end)
                 if (isCRL && status.validityPeriodStart != null && status.validityPeriodEnd != null) {
                     if (isNotEmpty()) append('\n')
                     append("Valid: ${dateFormat.format(status.validityPeriodStart)}")
                     append(" to: ${dateFormat.format(status.validityPeriodEnd)}")
                 }
-                // Always show failure/warning messages here if present
                 status.errorMessage?.let { msg ->
                     if (isNotEmpty()) append('\n')
                     append(msg)
@@ -132,7 +140,6 @@ class GroupedMonitorAdapter(
                 certInfoTextView.visibility = View.GONE
             }
             
-            // Status text shows only Up/Down, color-coded
             if (status.isUp) {
                 statusTextView.text = "Up"
                 statusTextView.setTextColor(itemView.context.getColor(R.color.status_up))
